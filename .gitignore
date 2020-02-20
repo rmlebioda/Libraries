@@ -2,3 +2,4 @@
 *.pyc
 iswiki.if.uj.edu.pl
 download_log
+__pycache__
