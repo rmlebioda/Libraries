@@ -21,7 +21,7 @@ def _rename_non_ascii_by_path(_root_path, _file, _type: str = ''):
         os.rename(_root_path + '\\' + _file, _root_path + '\\' + _replace_non_ascii(_file))
 
 
-def remove_ascii_from_paths(paths: List[str]) -> None:
+def remove_non_ascii_text_from(paths: List[str]) -> None:
     for path in paths:
         if not os.path.isdir(path):
             print('[E](Action: Skipping) Provided path is not a dir: "{}"'.format(path))
