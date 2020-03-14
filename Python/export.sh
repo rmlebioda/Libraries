@@ -12,6 +12,6 @@ echo '
 
 # RML scripts, executed: export.sh' >> $HOME_PROFILE_PYTHONPATH
 export_python_script 'pages_downloader'
-export_python_script 'os_ascii_remover'
+export_python_script 'path_ascii_remover'
 
 source $HOME_PROFILE_PYTHONPATH
