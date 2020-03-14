@@ -9,7 +9,7 @@ if sys.version_info < MIN_PYTHON_VERSION:
     print("This script '{}' requires Python version 3.7 or newer".format(__file__))
     sys.exit(1)
 
-from _os_ascii_remover import remove_non_ascii_text_from
+from _path_ascii_remover import remove_non_ascii_text_from
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
