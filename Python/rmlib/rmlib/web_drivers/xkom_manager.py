@@ -97,10 +97,26 @@ class XKomManager(PageManager):
         return 'XkomNotifier: '
     def __msg_prefix(self):
         return '[' + str(datetime.now()) + '] '
-    def ___is_price_disabled(self):
-        return self.driver.find_element_by_xpath('/html/body/div[2]/div[2]/div/div/div[1]/div[3]/div[2]/div[2]/div[2]/div/div[2]/div/div/button').get_property('disabled')
+    def is_button_adding_to_chart_disabled(self):
+        """Checks, if items is available for buying (can be added to chart)
+
+        Raises:
+            InvalidWebpageException: Adding to chart button was not found
+
+        Returns:
+            bool: Whenever item can be bought or not
+        """        
+        try:
+            return self.driver.find_element_by_xpath('/html/body/div[2]/div[2]/div/div/div[1]/div[3]/div[2]/div[2]/div[2]/div/div[2]/div/div/button').get_property('disabled')
+        except NoSuchElementException:
+            raise InvalidWebpageException(str(e))
 
     def __validate(self):
+        """Validates read webpage for common technical errors
+
+        Raises:
+            TechnicalBreakException: When page was not loaded successfully (not fully implemented!)
+        """        
         # check technical break 
         try:
             if self.driver.find_element_by_xpath('/html/body/div[2]/div/img').get_property('alt') == 'Przerwa techniczna':
@@ -109,11 +125,19 @@ class XKomManager(PageManager):
             raise
         except Exception:
             pass
-        # check error 501... (haven't saved the webpage...)
+        # check error 503... (haven't saved the webpage...)
         # ok
         return
         
     def get_cart_members(self) -> int:
+        """Returns amount of items in cart
+
+        Raises:
+            CartAmountException: When webpage is not loaded correctly or function was unable find cart amount element
+
+        Returns:
+            int: Amount of items in cart
+        """        
         try:
             return int(self.driver.find_element_by_xpath('/html/body/div[2]/div[1]/div/header/div[1]/div[4]/div/div[4]/div/div[1]/a/div[1]/div/div/span').text)
         except NoSuchElementException:
@@ -122,6 +146,15 @@ class XKomManager(PageManager):
             raise CartAmountException(str(e))
 
     def add_to_cart(self, go_to_cart = True):
+        """Adds current visiting product to cart
+
+        Args:
+            go_to_cart (bool, optional): Whenever driver should proceed to chart after adding product. Defaults to True.
+
+        Raises:
+            AddToCartException: When button "Add to chart" is not found
+            TimeoutException: When popup after adding item to chart is not shown in given timeout
+        """        
         try:
             button = self.driver.find_element_by_xpath('/html/body/div[2]/div[2]/div/div/div[1]/div[3]/div[2]/div[2]/div[2]/div/div[2]/div[2]/div/button')
             if button.text != 'Dodaj do koszyka':
@@ -139,6 +172,8 @@ class XKomManager(PageManager):
                 self.driver.find_element_by_xpath('/html/body/div[3]/div[10]/div/div/div/div[4]/a').click()
         except AddToCartException:
             raise
+        except NoSuchElementException:
+            raise AddToCartException(str(e))
         except TimeoutException as e:
             raise AddToCartException('Timeout on adding to cart' + str(e))
         except Exception as e:
@@ -153,6 +188,14 @@ class XKomManager(PageManager):
         return False
 
     def go_to_cart(self, load_limit=5):
+        """Proceedes to cart
+
+        Args:
+            load_limit (int, optional): Max tries for opening cart. Defaults to 5.
+
+        Raises:
+            LoadingPageFailureException: When loading webpage failed more than load_limit times
+        """        
         __try = 0
         while True:
             if self.__is_in_cart_webpage() or __try > load_limit:
@@ -171,6 +214,11 @@ class XKomManager(PageManager):
         return False
 
     def confirm_cart_order(self):
+        """Proceedes from popup to cart, that opens after adding product to shop cart.
+
+        Raises:
+            InvalidWebpageException: When popup is not found
+        """        
         try:
             self.driver.find_element_by_xpath('/html/body/div[2]/div[2]/div/div[1]/div[2]/div/div[1]/div[2]/div[3]/button').click()
         except Exception:
@@ -186,6 +234,11 @@ class XKomManager(PageManager):
         return False
 
     def login_if_necessary(self):
+        """Checks if webpage requires logging in, if so then it will the data, log in and wait for order page to load up in timeout period
+
+        Raises:
+            InvalidLoginCredentialsException: When login or password is None/empty
+        """        
         if self.login == None or self.login == '':
             raise InvalidLoginCredentialsException('Loging in impossible, login is empty or None')
         if self.password == None or self.password == '':
@@ -218,6 +271,14 @@ class XKomManager(PageManager):
         self.__send_to_input('/html/body/div[1]/div/div[2]/form/div/div[1]/section[1]/div/div[6]/label/input', order.Phone)
 
     def buy(self, order: OrderData):
+        """Buys everything, that is in cart
+
+        Args:
+            order (OrderData): Filled order data for shipping infromation
+
+        Raises:
+            InvalidOrderDataException: When order data is None or when not all fields are filled (partial filling for personal pickup not supported yet)
+        """        
         if order == None:
             raise InvalidOrderDataException('Order data must be filled')
         order.validate()
