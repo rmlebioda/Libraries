@@ -4,7 +4,7 @@ iswiki.if.uj.edu.pl
 download_log
 __pycache__
 
-.vscode/*
+**/.vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json

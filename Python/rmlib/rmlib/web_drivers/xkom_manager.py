@@ -1,12 +1,98 @@
 from datetime import datetime
+from enum import IntEnum
+from dataclasses import dataclass
 
-from rmlib.web_drivers.webpage_manager import PageNotifier
+from rmlib.web_drivers.webpage_manager import PageManager
 from rmlib.email_manager import EmailManager
-from rmlib.logger import Logger
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
-class XKomNotifier(PageNotifier):
+class TechnicalBreakException(Exception):
+    pass
+class CartAmountException(Exception):
+    pass
+class AddToCartException(Exception):
+    pass
+class InvalidWebpageException(Exception):
+    pass
+class InvalidLoginCredentialsException(Exception):
+    pass
+class LoadingPageFailureException(Exception):
+    pass
+class InvalidOrderDataException(Exception):
+    pass
+
+class ShippingEnum(IntEnum):
+    Courier = 1
+    PersonalPickup = 2
+    ParcelLockers = 3
+
+class PaymentMethodEnum(IntEnum):
+    Blik = 1
+    CreditCardOnline = 2
+    FastTransferDotPay = 3
+    CashTransfer = 4
+    UponReceipt = 5
+    Rates = 6
+    Leasing = 7
+
+@dataclass
+class OrderData:
+    Shipping: ShippingEnum
+    PaymentMethod: PaymentMethodEnum
+    FirstAndLastName: str
+    Address: str
+    ZipCode: str
+    Town: str
+    Email: str
+    Phone: str
+    def validate(self):
+        if self.Shipping == None:
+            raise InvalidOrderDataException("Shipping cannot be None")
+        if self.PaymentMethod == None:
+            raise InvalidOrderDataException("PaymentMethod cannot be None")
+        if self.FirstAndLastName == '' or self.FirstAndLastName == None:
+            raise InvalidOrderDataException("First and Last name cannot be None/empty")
+        if self.Address == '' or self.Address == None:
+            raise InvalidOrderDataException("Address cannot be None/empty")
+        if self.ZipCode == '' or self.ZipCode == None:
+            raise InvalidOrderDataException("Zip code cannot be None/empty")
+        if self.Town == '' or self.Town == None:
+            raise InvalidOrderDataException("Town cannot be None/empty")
+        if self.Email == '' or self.Email == None:
+            raise InvalidOrderDataException("Email cannot be None/empty")
+        if self.Phone == '' or self.Phone == None:
+            raise InvalidOrderDataException("Phone cannot be None/empty")
+    @staticmethod
+    def get_xpath_shipping(Shipping: ShippingEnum) -> str:
+        if Shipping == ShippingEnum.Courier:
+            return '/html/body/div[1]/div/div[2]/form/div/div[1]/div[2]/div/div[1]/div/label'
+        elif Shipping == ShippingEnum.ParcelLockers:
+            return '/html/body/div[1]/div/div[2]/form/div/div[1]/div[2]/div/div[2]/div[1]/label'
+        elif Shipping == ShippingEnum.PersonalPickup:
+            '/html/body/div[1]/div/div[2]/form/div/div[1]/div[2]/div/div[3]/div[1]/label'
+        else:
+            raise InvalidOrderDataException('Unknown Shipping method: ' + str(Shipping))
+    @staticmethod
+    def get_xpath_payment_mathod(PaymentMethod: PaymentMethodEnum) -> str:
+        return '/html/body/div[1]/div/div[2]/form/div/div[1]/div[3]/div[2]/div[ ' + str(int(PaymentMethod)) + ']/div/label'
+
+class XKomManager(PageManager):
     """Class for x-kom disabled checking and sending email to your email address
     """
+    def __init__(self, *, timeout=60, login=None, password=None):
+        super(XKomManager, self).__init__(timeout=timeout)
+        self.login = login
+        self.password = password
+
+    def get(self, url: str):
+        self.driver.get(url)
+        self.__validate()
+
+    def refresh(self):
+        super(XKomManager, self).refresh()
+        self.__validate()
+
     def __title_prefix(self):
         return 'XkomNotifier: '
     def __msg_prefix(self):
@@ -14,35 +100,128 @@ class XKomNotifier(PageNotifier):
     def ___is_price_disabled(self):
         return self.driver.find_element_by_xpath('/html/body/div[2]/div[2]/div/div/div[1]/div[3]/div[2]/div[2]/div[2]/div/div[2]/div/div/button').get_property('disabled')
 
-    def __validate_loaded_page(self):
-        raise NotImplementedError()
+    def __validate(self):
+        # check technical break 
+        try:
+            if self.driver.find_element_by_xpath('/html/body/div[2]/div/img').get_property('alt') == 'Przerwa techniczna':
+                raise TechnicalBreakException()
+        except TechnicalBreakException:
+            raise
+        except Exception:
+            pass
+        # check error 501... (haven't saved the webpage...)
+        # ok
+        return
         
+    def get_cart_members(self) -> int:
+        try:
+            return int(self.driver.find_element_by_xpath('/html/body/div[2]/div[1]/div/header/div[1]/div[4]/div/div[4]/div/div[1]/a/div[1]/div/div/span').text)
+        except NoSuchElementException:
+            return 0
+        except Exception as e:
+            raise CartAmountException(str(e))
 
-    def __init__(self, url, email_manager: EmailManager, email_receipient, *, logger: Logger=None, send_email_at_startup: bool=True, send_email_at_change: bool=True, timeout=60):
-        super(XKomNotifier, self).__init__(url, email_manager, email_receipient, logger=logger, send_email_at_startup=send_email_at_startup, send_email_at_change=send_email_at_change, timeout=timeout)
-        self.disabled = self.___is_price_disabled()
-        if send_email_at_startup:
-            self.email_manager.send_email(
-                to=self.email_receipient,
-                subject=(self.__title_prefix() + self.driver.title),
-                msg=(self.__msg_prefix() + 'Disabled: `' + str(self.disabled) + '`')
-            )
-            if self.logger:
-                self.logger.log(self.__msg_prefix() + 'Email sent', console_add_prefix=False)
-        if self.logger:
-            self.logger.log(self.__msg_prefix() + 'Disabled: `' + str(self.disabled) + '`', console_add_prefix=False)
+    def add_to_cart(self, go_to_cart = True):
+        try:
+            button = self.driver.find_element_by_xpath('/html/body/div[2]/div[2]/div/div/div[1]/div[3]/div[2]/div[2]/div[2]/div/div[2]/div[2]/div/button')
+            if button.text != 'Dodaj do koszyka':
+                raise AddToCartException('Failed to find button "Dodaj do koszyka" by xpath')
+            button.click()
+            if go_to_cart == True:
+                def __found_continue_to_cart_button(driver):
+                    try:
+                        if driver.find_element_by_xpath('/html/body/div[3]/div[10]/div/div/div/div[4]/a').text == 'Przejdź do koszyka':
+                            return True
+                    except Exception:
+                        return False
+                    return False
+                WebDriverWait(self.driver, self.timeout).until(lambda x: __found_continue_to_cart_button(x))
+                self.driver.find_element_by_xpath('/html/body/div[3]/div[10]/div/div/div/div[4]/a').click()
+        except AddToCartException:
+            raise
+        except TimeoutException as e:
+            raise AddToCartException('Timeout on adding to cart' + str(e))
+        except Exception as e:
+            raise AddToCartException(str(e))
 
-    def refresh(self):
-        super(XKomNotifier, self).refresh()
-        new_disabled = self.___is_price_disabled()
-        if new_disabled != self.disabled:
-            self.email_manager.send_email(
-                to=self.email_receipient,
-                subject=(self.__title_prefix() + self.driver.title),
-                msg=(self.__msg_prefix() + 'Disabled changed from: `' + str(self.disabled) + '` to `' + str(new_disabled) + '`')
-            )
-            if self.logger:
-                self.logger.log(self.__msg_prefix() + 'Email sent. Price changed from: `' + str(self.disabled) + '` to `' + str(new_disabled) + '`', console_add_prefix=False)
-        if self.logger:
-            self.logger.log(self.__msg_prefix() + 'Page refreshed. Current disabled: `' + str(new_disabled) + '`', console_add_prefix=False)
-        self.disabled = new_disabled
+    def __is_in_cart_webpage(self):
+        try:
+            if self.driver.find_element_by_xpath('/html/body/div[2]/div[2]/div/div[1]/div[1]/div[1]/div[1]').text.startswith('Koszyk'):
+                return True
+        except:
+            pass
+        return False
+
+    def go_to_cart(self, load_limit=5):
+        __try = 0
+        while True:
+            if self.__is_in_cart_webpage() or __try > load_limit:
+                break
+            self.get('https://www.x-kom.pl/koszyk')
+            __try += 1
+        if __try > load_limit:
+            raise LoadingPageFailureException('Failed to load cart with limit of:' + str(load_limit))
+
+    def __is_in_login_page(self):
+        try:
+            if self.driver.find_element_by_xpath('/html/body/div[1]/div/div/div[1]/div/div[1]/div/h2').text == 'Zaloguj się':
+                return True
+        except:
+            pass
+        return False
+
+    def confirm_cart_order(self):
+        try:
+            self.driver.find_element_by_xpath('/html/body/div[2]/div[2]/div/div[1]/div[2]/div/div[1]/div[2]/div[3]/button').click()
+        except Exception:
+            raise InvalidWebpageException('Could not find confirm button on cart order on webpage: ' + self.driver.current_url)
+        WebDriverWait(self.driver, self.timeout).until(lambda x: self.__is_in_login_page())
+
+    def __is_in_order_page(self):
+        try:
+            if self.driver.find_element_by_xpath('/html/body/div[1]/div/div[2]/form/div/div[1]/h1').text == 'Dostawa i płatność':
+                return True
+        except Exception:
+            pass
+        return False
+
+    def login_if_necessary(self):
+        if self.login == None or self.login == '':
+            raise InvalidLoginCredentialsException('Loging in impossible, login is empty or None')
+        if self.password == None or self.password == '':
+            raise InvalidLoginCredentialsException('Loging in impossible, password is empty or None')
+        try:
+            if self.__is_in_login_page():
+                email_login_field = self.driver.find_element_by_xpath('/html/body/div[1]/div/div/div[1]/div/div[1]/div/form/div[1]/label/input')
+                password_field = self.driver.find_element_by_xpath('/html/body/div[1]/div/div/div[1]/div/div[1]/div/form/div[2]/div/label/input')
+                email_login_field.send_keys(self.login)
+                password_field.send_keys(self.password)
+                self.driver.find_element_by_xpath('/html/body/div[1]/div/div/div[1]/div/div[1]/div/form/button').click()
+        except:
+            pass
+        WebDriverWait(self.driver, self.timeout).until(lambda x: self.__is_in_order_page())
+    
+    def __send_to_input(self, input_xpath, value):
+        __input = self.driver.find_element_by_xpath(input_xpath)
+        if __input.get_attribute('value') != '':
+            raise InvalidOrderDataException('Input with xpath ' + input_xpath + ' should be empty before filling!')
+        __input.send_keys(value)
+
+    def __fill_order(self, order: OrderData):
+        self.driver.find_element_by_xpath(OrderData.get_xpath_shipping(order.Shipping)).click()
+        self.driver.find_element_by_xpath(OrderData.get_xpath_payment_mathod(order.PaymentMethod)).click()
+        self.__send_to_input('/html/body/div[1]/div/div[2]/form/div/div[1]/section[1]/div/div[1]/label/input', order.FirstAndLastName)
+        self.__send_to_input('/html/body/div[1]/div/div[2]/form/div/div[1]/section[1]/div/div[2]/label/input', order.Address)
+        self.__send_to_input('/html/body/div[1]/div/div[2]/form/div/div[1]/section[1]/div/div[3]/label/input', order.ZipCode)
+        self.__send_to_input('/html/body/div[1]/div/div[2]/form/div/div[1]/section[1]/div/div[4]/label/input', order.Town)
+        self.__send_to_input('/html/body/div[1]/div/div[2]/form/div/div[1]/section[1]/div/div[5]/label/input', order.Email)
+        self.__send_to_input('/html/body/div[1]/div/div[2]/form/div/div[1]/section[1]/div/div[6]/label/input', order.Phone)
+
+    def buy(self, order: OrderData):
+        if order == None:
+            raise InvalidOrderDataException('Order data must be filled')
+        order.validate()
+        self.go_to_cart()
+        self.confirm_cart_order()
+        self.login_if_necessary()
+        self.__fill_order(order)
