@@ -214,7 +214,7 @@ class XKomManager(PageManager):
         return False
 
     def confirm_cart_order(self):
-        """Proceedes from popup to cart, that opens after adding product to shop cart.
+        """Proceeds from popup to cart, that opens after adding product to shop cart.
 
         Raises:
             InvalidWebpageException: When popup is not found
@@ -271,7 +271,7 @@ class XKomManager(PageManager):
         self.__send_to_input('/html/body/div[1]/div/div[2]/form/div/div[1]/section[1]/div/div[6]/label/input', order.Phone)
 
     def buy(self, order: OrderData):
-        """Buys everything, that is in cart
+        """Buys everything in chart (without confirming)
 
         Args:
             order (OrderData): Filled order data for shipping infromation
