@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 BASEDIR=$(cd "$(dirname "$0")/."; pwd)
-HOME_PROFILE_PYTHONPATH=$HOME'/.bash_profile'
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    HOME_PROFILE_PYTHONPATH=$HOME'/.zshrc' # we are not supporting mac os older than catalina
+else
+    HOME_PROFILE_PYTHONPATH=$HOME'/.bashrc'
+fi
 HOME_RML_FILEPATH=$HOME'/.rml.env'
 
-export_python_script()
+export_python_library()
 {
     if [ $# -eq 0 ]; then
-        echo "Invalid function call (export_python_script)"
+        echo "Invalid function call (export_python_library)"
         exit 1
     fi
     path=$1
@@ -20,6 +24,6 @@ export_python_script()
 
 echo '
 # RML scripts, executed: export.sh' >> $HOME_PROFILE_PYTHONPATH
-export_python_script 'rmlib'
+export_python_library 'rmlib'
 
 source $HOME_PROFILE_PYTHONPATH
