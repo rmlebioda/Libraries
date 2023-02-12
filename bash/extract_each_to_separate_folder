@@ -1,0 +1,24 @@
+#!/bin/bash
+
+input=$@
+echo "arguments $#: $input"
+
+items=()
+
+if [ $# -gt 1 ]; then
+for arg in "$@"; do
+  echo "adding $arg"
+  items+=("$arg")
+done
+else
+while IFS= read -d ' ' item; do
+  echo "adding $item"
+  items+=("$item")
+done <<< "$input "
+fi
+
+
+for file in "${items[@]}"; do
+    echo "extracting '$file' into '${file%.*}'"
+    unzip -d "${file%.*}" "$file"
+done
